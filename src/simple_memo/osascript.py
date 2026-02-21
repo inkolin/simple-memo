@@ -4,13 +4,17 @@ import subprocess
 import sys
 
 
-def run(script: str) -> str:
+def run(script: str, timeout: int = 30) -> str:
     """Execute an AppleScript and return stdout. Exit on error."""
-    result = subprocess.run(
-        ["osascript", "-e", script],
-        capture_output=True,
-        text=True,
-    )
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        return "error: timeout"
     if result.returncode != 0:
         # Some AppleScript errors are expected (e.g. "not found").
         # Return stderr so the caller can inspect it.

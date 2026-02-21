@@ -127,68 +127,102 @@ def create_reminder(title: str, due_date: str | None = None, due_time: str = "09
 
 
 def complete_reminder(title: str) -> bool:
-    """Mark a reminder as completed."""
-    esc = osa_escape(title)
+    """Mark a reminder as completed (resolves to ID internally)."""
+    rem_id = _resolve_reminder_id(title, completed=False)
+    if rem_id is None:
+        print(colors.red(f"Reminder not found: {title}"))
+        return False
+
+    esc = osa_escape(rem_id)
     script = f'''
         tell application "Reminders"
-            set matchedReminders to (reminders whose name is "{esc}" and completed is false)
-            if (count of matchedReminders) is 0 then
-                return "error:not_found"
-            end if
-            set r to item 1 of matchedReminders
-            set completed of r to true
+            set theRem to first reminder whose id is "{esc}"
+            set completed of theRem to true
             return "completed"
         end tell
     '''
     result = run(script)
     if result.startswith("error:"):
-        print(colors.red(f"Reminder not found: {title}"))
+        print(colors.red(f"Failed to complete: {title}"))
         return False
     print(colors.green(f"Completed: {title}"))
     return True
 
 
 def delete_reminder(title: str) -> bool:
-    """Delete a reminder."""
-    esc = osa_escape(title)
+    """Delete a reminder by title (resolves to ID internally to avoid confirmation dialog)."""
+    rem_id = _resolve_reminder_id(title)
+    if rem_id is None:
+        print(colors.red(f"Reminder not found: {title}"))
+        return False
+    return delete_reminder_by_id(rem_id, title)
+
+
+def delete_reminder_by_id(rem_id: str, label: str = "") -> bool:
+    """Delete a reminder by its internal ID (no confirmation dialog)."""
+    esc = osa_escape(rem_id)
     script = f'''
         tell application "Reminders"
-            set matchedReminders to (reminders whose name is "{esc}")
-            if (count of matchedReminders) is 0 then
-                return "error:not_found"
-            end if
-            delete item 1 of matchedReminders
-            return "deleted"
+            set theRem to first reminder whose id is "{esc}"
+            delete theRem
         end tell
     '''
     result = run(script)
     if result.startswith("error:"):
-        print(colors.red(f"Reminder not found: {title}"))
+        print(colors.red(f"Failed to delete: {label or rem_id}"))
         return False
-    print(colors.green(f"Deleted reminder: {title}"))
+    print(colors.green(f"Deleted reminder: {label or rem_id}"))
     return True
 
 
-def edit_reminder(title: str, new_title: str | None = None, new_date: str | None = None) -> bool:
-    """Edit a reminder's title or due date."""
+def _resolve_reminder_id(title: str, completed: bool | None = None) -> str | None:
+    """Look up a reminder's internal ID by title.
+
+    Args:
+        completed: If False, only match non-completed. If None, match any.
+    """
     esc = osa_escape(title)
+    if completed is False:
+        filter_clause = f'whose name is "{esc}" and completed is false'
+    else:
+        filter_clause = f'whose name is "{esc}"'
+
+    script = f'''
+        tell application "Reminders"
+            set matchedReminders to (reminders {filter_clause})
+            if (count of matchedReminders) is 0 then
+                return "error:not_found"
+            end if
+            return id of item 1 of matchedReminders
+        end tell
+    '''
+    result = run(script)
+    if result.startswith("error:"):
+        return None
+    return result.strip()
+
+
+def edit_reminder(title: str, new_title: str | None = None, new_date: str | None = None) -> bool:
+    """Edit a reminder's title or due date (resolves to ID internally)."""
+    rem_id = _resolve_reminder_id(title)
+    if rem_id is None:
+        print(colors.red(f"Reminder not found: {title}"))
+        return False
+
+    esc_id = osa_escape(rem_id)
 
     if new_title:
         esc_new = osa_escape(new_title)
         script = f'''
             tell application "Reminders"
-                set matchedReminders to (reminders whose name is "{esc}")
-                if (count of matchedReminders) is 0 then
-                    return "error:not_found"
-                end if
-                set r to item 1 of matchedReminders
-                set name of r to "{esc_new}"
+                set theRem to first reminder whose id is "{esc_id}"
+                set name of theRem to "{esc_new}"
                 return "updated"
             end tell
         '''
         result = run(script)
         if result.startswith("error:"):
-            print(colors.red(f"Reminder not found: {title}"))
+            print(colors.red(f"Failed to rename: {title}"))
             return False
         print(colors.green(f"Renamed: {title} -> {new_title}"))
         return True
@@ -202,23 +236,19 @@ def edit_reminder(title: str, new_title: str | None = None, new_date: str | None
 
         script = f'''
             tell application "Reminders"
-                set matchedReminders to (reminders whose name is "{esc}")
-                if (count of matchedReminders) is 0 then
-                    return "error:not_found"
-                end if
-                set r to item 1 of matchedReminders
+                set theRem to first reminder whose id is "{esc_id}"
                 set dueDate to current date
                 set year of dueDate to {dt.year}
                 set month of dueDate to {dt.month}
                 set day of dueDate to {dt.day}
                 set time of dueDate to ({dt.hour} * hours + {dt.minute} * minutes)
-                set due date of r to dueDate
+                set due date of theRem to dueDate
                 return "updated"
             end tell
         '''
         result = run(script)
         if result.startswith("error:"):
-            print(colors.red(f"Reminder not found: {title}"))
+            print(colors.red(f"Failed to update: {title}"))
             return False
         print(colors.green(f"Updated due date for: {title}"))
         return True

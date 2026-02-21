@@ -96,15 +96,19 @@ def list_folders() -> list[str]:
 
 def read_note(title: str) -> str | None:
     """Read a note's content as Markdown (converted from HTML)."""
-    esc = osa_escape(title)
+    note_id = _resolve_id(title)
+    if note_id is None:
+        return None
+    return read_note_by_id(note_id)
+
+
+def read_note_by_id(note_id: str) -> str | None:
+    """Read a note's content as Markdown by ID."""
+    esc = osa_escape(note_id)
     script = f'''
         tell application "Notes"
-            set matchedNotes to (notes whose name is "{esc}")
-            if (count of matchedNotes) is 0 then
-                return "error:not_found"
-            end if
-            set n to item 1 of matchedNotes
-            return body of n
+            set theNote to first note whose id is "{esc}"
+            return body of theNote
         end tell
     '''
     raw = run(script)
@@ -115,15 +119,19 @@ def read_note(title: str) -> str | None:
 
 def read_note_html(title: str) -> str | None:
     """Read a note's raw HTML body."""
-    esc = osa_escape(title)
+    note_id = _resolve_id(title)
+    if note_id is None:
+        return None
+    return read_note_html_by_id(note_id)
+
+
+def read_note_html_by_id(note_id: str) -> str | None:
+    """Read a note's raw HTML body by ID."""
+    esc = osa_escape(note_id)
     script = f'''
         tell application "Notes"
-            set matchedNotes to (notes whose name is "{esc}")
-            if (count of matchedNotes) is 0 then
-                return "error:not_found"
-            end if
-            set n to item 1 of matchedNotes
-            return body of n
+            set theNote to first note whose id is "{esc}"
+            return body of theNote
         end tell
     '''
     raw = run(script)
@@ -185,7 +193,12 @@ def create_note_interactive(folder: str = "Notes") -> bool:
 
 def edit_note(title: str) -> bool:
     """Open a note in $EDITOR for editing."""
-    html = read_note_html(title)
+    note_id = _resolve_id(title)
+    if note_id is None:
+        print(colors.red(f"Note not found: {title}"))
+        return False
+
+    html = read_note_html_by_id(note_id)
     if html is None:
         print(colors.red(f"Note not found: {title}"))
         return False
@@ -208,17 +221,13 @@ def edit_note(title: str) -> bool:
             return False
 
         new_html = convert.md_to_html(new_content)
-        esc_title = osa_escape(title)
+        esc_id = osa_escape(note_id)
         esc_html = osa_escape(new_html)
 
         script = f'''
             tell application "Notes"
-                set matchedNotes to (notes whose name is "{esc_title}")
-                if (count of matchedNotes) is 0 then
-                    return "error:not_found"
-                end if
-                set n to item 1 of matchedNotes
-                set body of n to "{esc_html}"
+                set theNote to first note whose id is "{esc_id}"
+                set body of theNote to "{esc_html}"
             end tell
         '''
         result = run(script)
@@ -234,18 +243,19 @@ def edit_note(title: str) -> bool:
 
 def append_note(title: str, text: str) -> bool:
     """Append text (Markdown) to an existing note."""
-    esc_title = osa_escape(title)
+    note_id = _resolve_id(title)
+    if note_id is None:
+        print(colors.red(f"Note not found: {title}"))
+        return False
+
+    esc_id = osa_escape(note_id)
     html_text = convert.md_to_html(text)
     esc_html = osa_escape(html_text)
 
     script = f'''
         tell application "Notes"
-            set matchedNotes to (notes whose name is "{esc_title}")
-            if (count of matchedNotes) is 0 then
-                return "error:not_found"
-            end if
-            set n to item 1 of matchedNotes
-            set body of n to (body of n) & "{esc_html}"
+            set theNote to first note whose id is "{esc_id}"
+            set body of theNote to (body of theNote) & "{esc_html}"
         end tell
     '''
     result = run(script)
@@ -257,7 +267,33 @@ def append_note(title: str, text: str) -> bool:
 
 
 def delete_note(title: str) -> bool:
-    """Delete a note by title."""
+    """Delete a note by title (resolves to ID internally to avoid confirmation dialog)."""
+    note_id = _resolve_id(title)
+    if note_id is None:
+        print(colors.red(f"Note not found: {title}"))
+        return False
+    return delete_note_by_id(note_id, title)
+
+
+def delete_note_by_id(note_id: str, label: str = "") -> bool:
+    """Delete a note by its internal ID (no confirmation dialog)."""
+    esc = osa_escape(note_id)
+    script = f'''
+        tell application "Notes"
+            set theNote to first note whose id is "{esc}"
+            delete theNote
+        end tell
+    '''
+    result = run(script)
+    if result.startswith("error:"):
+        print(colors.red(f"Failed to delete: {label or note_id}"))
+        return False
+    print(colors.green(f"Deleted: {label or note_id}"))
+    return True
+
+
+def _resolve_id(title: str) -> str | None:
+    """Look up a note's internal ID by title."""
     esc = osa_escape(title)
     script = f'''
         tell application "Notes"
@@ -265,37 +301,35 @@ def delete_note(title: str) -> bool:
             if (count of matchedNotes) is 0 then
                 return "error:not_found"
             end if
-            delete item 1 of matchedNotes
-            return "deleted"
+            return id of item 1 of matchedNotes
         end tell
     '''
     result = run(script)
     if result.startswith("error:"):
-        print(colors.red(f"Note not found: {title}"))
-        return False
-    print(colors.green(f"Deleted: {title}"))
-    return True
+        return None
+    return result.strip()
 
 
 def move_note(title: str, target_folder: str) -> bool:
     """Move a note to a different folder (creates folder if needed)."""
-    esc_title = osa_escape(title)
+    note_id = _resolve_id(title)
+    if note_id is None:
+        print(colors.red(f"Note not found: {title}"))
+        return False
+
+    esc_id = osa_escape(note_id)
     esc_folder = osa_escape(target_folder)
 
     script = f'''
         tell application "Notes"
-            set matchedNotes to (notes whose name is "{esc_title}")
-            if (count of matchedNotes) is 0 then
-                return "error:not_found"
-            end if
-            set n to item 1 of matchedNotes
+            set theNote to first note whose id is "{esc_id}"
             try
                 set targetFolder to folder "{esc_folder}"
             on error
                 make new folder with properties {{name:"{esc_folder}"}}
                 set targetFolder to folder "{esc_folder}"
             end try
-            move n to targetFolder
+            move theNote to targetFolder
             return "moved"
         end tell
     '''
@@ -325,21 +359,34 @@ def create_folder(name: str) -> bool:
 
 
 def delete_folder(name: str) -> bool:
-    """Delete a folder from Apple Notes."""
-    esc = osa_escape(name)
+    """Delete a folder from Apple Notes (by ID to avoid confirmation dialog)."""
+    esc_name = osa_escape(name)
+    # Resolve folder ID first
     script = f'''
         tell application "Notes"
-            set matchedFolders to (folders whose name is "{esc}")
+            set matchedFolders to (folders whose name is "{esc_name}")
             if (count of matchedFolders) is 0 then
                 return "error:not_found"
             end if
-            delete item 1 of matchedFolders
-            return "deleted"
+            return id of item 1 of matchedFolders
         end tell
     '''
     result = run(script)
     if result.startswith("error:"):
         print(colors.red(f"Folder not found: {name}"))
+        return False
+
+    folder_id = result.strip()
+    esc_id = osa_escape(folder_id)
+    del_script = f'''
+        tell application "Notes"
+            set theFolder to first folder whose id is "{esc_id}"
+            delete theFolder
+        end tell
+    '''
+    result = run(del_script)
+    if result.startswith("error:"):
+        print(colors.red(f"Failed to delete folder: {name}"))
         return False
     print(colors.green(f"Deleted folder: {name}"))
     return True

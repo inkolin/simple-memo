@@ -2,18 +2,24 @@
 
 A simple, MIT-licensed CLI for Apple Notes & Reminders on macOS.
 
-Use it from the terminal, scripts, or AI agents — no restrictions.
+Use it from the terminal, scripts, or AI agents — no restrictions, no confirmation dialogs.
+
+## Features
+
+- Full Apple Notes management (create, read, edit, append, move, delete, search, export)
+- Full Apple Reminders management (add, complete, edit, delete)
+- No confirmation dialogs — all operations resolve internally via Apple's note/reminder IDs
+- AI-agent friendly — every command works non-interactively with `-y` flag
+- Markdown in, Markdown out — notes are stored as HTML but you work in Markdown
+- Interactive fuzzy search with [fzf](https://github.com/junegunn/fzf) support
+- Pipe-friendly — create notes from stdin
 
 ## Install
 
 ```bash
-# pip / pipx
 pip install simple-memo
 # or
 pipx install simple-memo
-
-# Homebrew (coming soon)
-# brew install inkolin/tap/simple-memo
 ```
 
 ## Notes
@@ -32,13 +38,13 @@ simple-memo append "Title" "More text"    # Append to a note
 simple-memo move "Title" "Archive"        # Move to folder (creates if needed)
 simple-memo search "keyword"              # Search by content/title
 simple-memo search --fzf                  # Interactive fuzzy search (requires fzf)
-simple-memo delete "Old Note"             # Delete a note
+simple-memo delete -y "Old Note"          # Delete a note
 simple-memo count                         # Count total notes
 simple-memo export                        # Export all to ~/Desktop/simple-memo-export/
 simple-memo export -o ./backup            # Export to custom directory
 simple-memo export --html                 # Export as HTML instead of Markdown
 simple-memo mkfolder "Projects"           # Create a folder
-simple-memo rmfolder "Old Stuff"          # Delete a folder
+simple-memo rmfolder -y "Old Stuff"       # Delete a folder
 ```
 
 ## Reminders
@@ -51,13 +57,16 @@ simple-memo rem add "Meeting" -d 2025-03-01 -t 14:00  # With due date
 simple-memo rem done "Buy milk"           # Mark as completed
 simple-memo rem edit "Meeting" --new-title "Team sync"  # Rename
 simple-memo rem edit "Meeting" --new-date "2025-03-05 10:00"  # Reschedule
-simple-memo rem delete "Old reminder"     # Delete
+simple-memo rem delete -y "Old reminder"  # Delete
 ```
+
+## No Confirmation Dialogs
+
+Other Apple Notes CLI tools get stuck on macOS confirmation dialogs when deleting notes or reminders. `simple-memo` resolves every operation via Apple's internal note/reminder IDs, which bypasses all system dialogs completely. Delete, move, edit — everything works instantly without any popups or timeouts.
 
 ## Why?
 
-Existing Apple Notes CLI tools use restrictive licenses that prohibit AI usage.
-`simple-memo` is MIT-licensed — use it however you want, including with AI agents, commercial products, and automation scripts.
+Existing Apple Notes CLI tools use restrictive licenses that prohibit AI usage. `simple-memo` is MIT-licensed — use it however you want, including with AI agents, commercial products, and automation scripts.
 
 ## Requirements
 
